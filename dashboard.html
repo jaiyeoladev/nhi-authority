@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>shadow-soak</title>
+<style>
+  :root {
+    --bg: #0f1419; --panel: #171e26; --panel-2: #1d2630; --line: #2a3542;
+    --ink: #e6edf3; --ink-dim: #93a1b0; --accent: #4aa8ff;
+    --soaking: #d9a441; --clear: #4ab86a; --dep: #e5534b;
+    --inconcl: #b07fd6; --term: #6b7a8a; --radius: 10px;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f5f7fa; --panel: #ffffff; --panel-2: #f0f3f7; --line: #dce3ea;
+      --ink: #141a20; --ink-dim: #566573; --accent: #1f74d0;
+      --soaking: #b07d14; --clear: #2f9150; --dep: #c23a32;
+      --inconcl: #8a4fc0; --term: #7a8795;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  header {
+    display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap;
+    padding: 18px 24px; border-bottom: 1px solid var(--line); background: var(--panel);
+  }
+  header h1 { margin: 0; font-size: 19px; letter-spacing: .3px; }
+  header .sub { color: var(--ink-dim); font-size: 13px; }
+  header .spacer { flex: 1; }
+  button {
+    font: inherit; color: var(--ink); background: var(--panel-2);
+    border: 1px solid var(--line); border-radius: 8px; padding: 7px 13px;
+    cursor: pointer;
+  }
+  button:hover { border-color: var(--accent); }
+  button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+  main { padding: 20px 24px; max-width: 1100px; margin: 0 auto; }
+  .counts { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+  .count {
+    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 12px 16px; min-width: 110px;
+  }
+  .count .n { font-size: 26px; font-weight: 650; }
+  .count .l { font-size: 12px; color: var(--ink-dim); text-transform: uppercase; letter-spacing: .5px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 0; margin-bottom: 12px; overflow: hidden;
+  }
+  .card .row { display: flex; align-items: center; gap: 14px; padding: 14px 16px; cursor: pointer; }
+  .card .row:hover { background: var(--panel-2); }
+  .pill {
+    font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: .4px;
+    padding: 3px 9px; border-radius: 20px; white-space: nowrap; color: #0b0f14;
+  }
+  .pill.soaking { background: var(--soaking); }
+  .pill.clear { background: var(--clear); }
+  .pill.dependency_found { background: var(--dep); color: #fff; }
+  .pill.inconclusive { background: var(--inconcl); color: #fff; }
+  .pill.pending { background: var(--term); }
+  .pill.revoked, .pill.restored, .pill.aborted { background: var(--term); color: #fff; }
+  .fp { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+  .fp .act { color: var(--accent); }
+  .meta { color: var(--ink-dim); font-size: 12.5px; }
+  .grow { flex: 1; min-width: 0; }
+  .bar { height: 5px; background: var(--panel-2); border-radius: 3px; overflow: hidden; margin-top: 6px; }
+  .bar > i { display: block; height: 100%; background: var(--soaking); }
+  .detail { border-top: 1px solid var(--line); padding: 14px 16px; background: var(--panel-2); display: none; }
+  .detail.open { display: block; }
+  .detail h4 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; color: var(--ink-dim); letter-spacing: .5px; }
+  .detail .k { color: var(--ink-dim); }
+  .trans { font-size: 13px; }
+  .trans li { margin-bottom: 4px; }
+  .actions { display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+  .empty { color: var(--ink-dim); text-align: center; padding: 40px; }
+  code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+  a { color: var(--accent); }
+</style>
+</head>
+<body>
+<header>
+  <h1>shadow-soak</h1>
+  <span class="sub">shadow-deny soak tracker</span>
+  <span class="spacer"></span>
+  <button id="tick" class="primary">Run tick</button>
+  <button id="refresh">Refresh</button>
+</header>
+<main>
+  <div class="counts" id="counts"></div>
+  <div id="list"></div>
+</main>
+<script>
+const STATES = ["soaking","dependency_found","clear","inconclusive","pending","revoked","restored","aborted"];
+const LABEL = {
+  soaking:"Soaking", dependency_found:"Dependency found", clear:"Clear",
+  inconclusive:"Inconclusive", pending:"Pending", revoked:"Revoked",
+  restored:"Restored", aborted:"Aborted"
+};
+function days(s){ if(s==null) return "—"; const d=s/86400; return d>=1? d.toFixed(1)+"d" : (s/3600).toFixed(1)+"h"; }
+
+async function api(path, method="GET", body){
+  const opt = { method, headers: {"Content-Type":"application/json"} };
+  if(body) opt.body = JSON.stringify(body);
+  const r = await fetch(path, opt);
+  return r.json();
+}
+
+function fpHtml(s){
+  return `<span class="fp"><span class="act">${s.action}</span> on ${s.resource}`
+       + (s.condition? ` <span class="meta">if ${s.condition}</span>`:"") + `</span>`;
+}
+
+function render(soaks){
+  // counts
+  const byState = {};
+  for(const s of soaks){ byState[s.state]=(byState[s.state]||0)+1; }
+  const counts = document.getElementById("counts");
+  counts.innerHTML = STATES.filter(st=>byState[st]).map(st=>
+    `<div class="count"><div class="n">${byState[st]}</div><div class="l">${LABEL[st]}</div></div>`
+  ).join("") || `<div class="meta">No soaks yet. Import a plan or create one, then run a tick.</div>`;
+
+  const list = document.getElementById("list");
+  if(!soaks.length){ list.innerHTML = `<div class="empty">Nothing to show.</div>`; return; }
+
+  // order: most actionable first
+  const rank = {dependency_found:0, clear:1, inconclusive:2, soaking:3, pending:4, revoked:5, restored:6, aborted:7};
+  soaks.sort((a,b)=> (rank[a.state]-rank[b.state]) || a.action.localeCompare(b.action));
+
+  list.innerHTML = soaks.map(s=>{
+    let progress = "";
+    if(s.state==="soaking" && s.ends_at && s.started_at){
+      const total = s.ends_at - s.started_at;
+      const done = Math.min(1, Math.max(0, (total - (s.seconds_remaining||0))/total));
+      progress = `<div class="bar"><i style="width:${(done*100).toFixed(0)}%"></i></div>`;
+    }
+    return `<div class="card" data-id="${s.id}">
+      <div class="row" onclick="toggle('${s.id}')">
+        <span class="pill ${s.state}">${LABEL[s.state]}</span>
+        <div class="grow">
+          ${fpHtml(s)}
+          <div class="meta">${s.identity_id} · coverage ${(s.log_coverage*100).toFixed(0)}%${s.state==="soaking"? " · "+days(s.seconds_remaining)+" left":""}</div>
+          ${progress}
+        </div>
+      </div>
+      <div class="detail" id="d-${s.id}"></div>
+    </div>`;
+  }).join("");
+}
+
+async function toggle(id){
+  const el = document.getElementById("d-"+id);
+  if(el.classList.contains("open")){ el.classList.remove("open"); el.innerHTML=""; return; }
+  const data = await api("/api/soaks/"+id);
+  const s = data.soak;
+  const trans = (data.transitions||[]).map(t=>
+    `<li><code>${t.from_state} → ${t.to_state}</code> <span class="k">${new Date(t.at*1000).toLocaleString()}</span><br><span class="meta">${t.rationale}</span></li>`
+  ).join("") || "<li class='meta'>No transitions recorded.</li>";
+  let ops = "";
+  if(s.state==="clear") ops += `<button class="primary" onclick="resolveSoak('${id}','revoked','Operator confirmed clean soak; revocation applied.')">Mark revoked</button>`;
+  if(s.state==="dependency_found") ops += `<button onclick="resolveSoak('${id}','restored','Dependency found; permission kept.')">Mark restored</button>`;
+  if(s.state==="pending") ops += `<button class="primary" onclick="startSoak('${id}')">Start soak</button>`;
+  if(!["revoked","restored","aborted"].includes(s.state)) ops += `<button onclick="resolveSoak('${id}','aborted','Operator aborted the soak.')">Abort</button>`;
+
+  el.innerHTML = `
+    <h4>Grant sources to detach on revoke</h4>
+    <div>${s.sources.map(x=>`<code>${x}</code>`).join(" ") || "<span class='meta'>none recorded</span>"}</div>
+    <h4 style="margin-top:14px">Soak</h4>
+    <div class="meta">window ${s.soak_days}d · coverage ${(s.log_coverage*100).toFixed(0)}% (floor ${(s.min_coverage*100).toFixed(0)}%) · origin ${s.origin}</div>
+    ${s.note? `<div class="meta" style="margin-top:4px">${s.note}</div>`:""}
+    <h4 style="margin-top:14px">History</h4>
+    <ul class="trans">${trans}</ul>
+    <div class="actions">${ops}</div>`;
+  el.classList.add("open");
+}
+
+async function startSoak(id){ await api("/api/start","POST",{soak_id:id}); await load(); }
+async function resolveSoak(id,to,rationale){ await api("/api/resolve","POST",{soak_id:id,to,rationale}); await load(); }
+
+async function load(){
+  const data = await api("/api/soaks");
+  render(data.soaks||[]);
+}
+document.getElementById("refresh").onclick = load;
+document.getElementById("tick").onclick = async ()=>{ await api("/api/tick","POST"); await load(); };
+load();
+</script>
+</body>
+</html>
