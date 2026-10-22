@@ -1,0 +1,193 @@
+{
+  "usage_window_start": "2026-06-01",
+  "identities": [
+    {
+      "id": "support-copilot",
+      "type": "ai_agent",
+      "platform": "azure",
+      "owner": "customer-support-engineering",
+      "description": "LLM agent that reads support attachments and queues tickets"
+    },
+    {
+      "id": "ci-deployer",
+      "type": "service_principal",
+      "platform": "azure",
+      "owner": "platform-team",
+      "description": "Legacy deployment pipeline app registration"
+    },
+    {
+      "id": "arn:aws:iam::111122223333:role/invoice-agent",
+      "type": "ai_agent",
+      "platform": "aws",
+      "owner": "finance-automation",
+      "description": "Bedrock agent that extracts invoice data"
+    },
+    {
+      "id": "arn:aws:iam::111122223333:role/data-admin",
+      "type": "iam_role",
+      "platform": "aws",
+      "owner": "data-platform"
+    }
+  ],
+  "grants": [
+    {
+      "id": "az-ra-reader",
+      "identity": "support-copilot",
+      "actions": ["*/read"],
+      "scope": "/subscriptions/sub-prod",
+      "source": "role:Reader",
+      "plane": "control"
+    },
+    {
+      "id": "az-ra-contributor",
+      "identity": "support-copilot",
+      "actions": ["*"],
+      "not_actions": [
+        "Microsoft.Authorization/*/Delete",
+        "Microsoft.Authorization/*/Write",
+        "Microsoft.Authorization/elevateAccess/Action"
+      ],
+      "scope": "/subscriptions/sub-prod/resourceGroups/rg-support",
+      "source": "role:Contributor",
+      "plane": "control"
+    },
+    {
+      "id": "az-ra-blob-reader",
+      "identity": "support-copilot",
+      "actions": ["Microsoft.Storage/storageAccounts/blobServices/containers/blobs/read"],
+      "scope": "/subscriptions/sub-prod/resourceGroups/rg-support/providers/Microsoft.Storage/storageAccounts/stsupport",
+      "source": "role:Storage Blob Data Reader",
+      "plane": "data"
+    },
+    {
+      "id": "az-ra-queue-sender",
+      "identity": "support-copilot",
+      "actions": ["Microsoft.Storage/storageAccounts/queueServices/queues/messages/add/action"],
+      "scope": "/subscriptions/sub-prod/resourceGroups/rg-support/providers/Microsoft.Storage/storageAccounts/stsupport",
+      "source": "role:Storage Queue Data Message Sender",
+      "plane": "data"
+    },
+    {
+      "id": "az-ra-kv-secrets",
+      "identity": "support-copilot",
+      "actions": ["Microsoft.KeyVault/vaults/secrets/getSecret/action", "Microsoft.KeyVault/vaults/secrets/readMetadata/action"],
+      "scope": "/subscriptions/sub-prod/resourceGroups/rg-support/providers/Microsoft.KeyVault/vaults/kv-support",
+      "source": "role:Key Vault Secrets User",
+      "plane": "data"
+    },
+    {
+      "id": "az-ra-owner",
+      "identity": "ci-deployer",
+      "actions": ["*"],
+      "scope": "/subscriptions/sub-prod",
+      "source": "role:Owner",
+      "plane": "control"
+    },
+    {
+      "id": "aws-s3-all",
+      "identity": "arn:aws:iam::111122223333:role/invoice-agent",
+      "actions": ["s3:*"],
+      "scope": "*",
+      "source": "policy:InvoiceAgentS3"
+    },
+    {
+      "id": "aws-bedrock-invoke",
+      "identity": "arn:aws:iam::111122223333:role/invoice-agent",
+      "actions": ["bedrock:InvokeModel"],
+      "scope": "arn:aws:bedrock:eu-west-2::foundation-model/*",
+      "source": "policy:InvoiceAgentBedrock"
+    },
+    {
+      "id": "aws-iam-admin",
+      "identity": "arn:aws:iam::111122223333:role/data-admin",
+      "actions": ["iam:*", "s3:*", "glue:*"],
+      "scope": "*",
+      "source": "policy:DataAdmin"
+    }
+  ],
+  "edges": [
+    {
+      "source": "support-copilot",
+      "target": "ci-deployer",
+      "kind": "owns",
+      "via": "listed as owner of the ci-deployer app registration, so it can add a client secret"
+    },
+    {
+      "source": "arn:aws:iam::111122223333:role/invoice-agent",
+      "target": "arn:aws:iam::111122223333:role/data-admin",
+      "kind": "can_assume",
+      "via": "data-admin trust policy allows invoice-agent"
+    }
+  ],
+  "usage": [
+    {
+      "identity": "support-copilot",
+      "action": "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/read",
+      "scope": "/subscriptions/sub-prod/resourceGroups/rg-support/providers/Microsoft.Storage/storageAccounts/stsupport/blobServices/default/containers/attachments",
+      "last_seen": "2026-10-18",
+      "plane": "data"
+    },
+    {
+      "identity": "support-copilot",
+      "action": "Microsoft.Storage/storageAccounts/queueServices/queues/messages/add/action",
+      "scope": "/subscriptions/sub-prod/resourceGroups/rg-support/providers/Microsoft.Storage/storageAccounts/stsupport/queueServices/default/queues/tickets",
+      "last_seen": "2026-10-19",
+      "plane": "data"
+    },
+    {
+      "identity": "support-copilot",
+      "action": "Microsoft.Web/sites/read",
+      "scope": "/subscriptions/sub-prod/resourceGroups/rg-support/providers/Microsoft.Web/sites/app-support",
+      "last_seen": "2026-10-15",
+      "plane": "control"
+    },
+    {
+      "identity": "support-copilot",
+      "action": "Microsoft.Web/sites/restart/action",
+      "scope": "/subscriptions/sub-prod/resourceGroups/rg-support/providers/Microsoft.Web/sites/app-support",
+      "last_seen": "2026-04-02",
+      "plane": "control"
+    },
+    {
+      "identity": "arn:aws:iam::111122223333:role/invoice-agent",
+      "action": "s3:GetObject",
+      "scope": "arn:aws:s3:::finance-invoices/inbound/2026/10/inv-0912.pdf",
+      "last_seen": "2026-10-19"
+    },
+    {
+      "identity": "arn:aws:iam::111122223333:role/invoice-agent",
+      "action": "s3:GetObject",
+      "scope": "arn:aws:s3:::finance-invoices/inbound/2026/09/inv-0811.pdf",
+      "last_seen": "2026-09-30"
+    },
+    {
+      "identity": "arn:aws:iam::111122223333:role/invoice-agent",
+      "action": "s3:PutObject",
+      "scope": "arn:aws:s3:::finance-invoices/extracted/2026/10/inv-0912.json",
+      "last_seen": "2026-10-19"
+    },
+    {
+      "identity": "arn:aws:iam::111122223333:role/invoice-agent",
+      "action": "bedrock:InvokeModel",
+      "scope": "arn:aws:bedrock:eu-west-2::foundation-model/anthropic.claude",
+      "last_seen": "2026-10-19"
+    }
+  ],
+  "dependencies": [
+    {
+      "consumer": "ticket-ingest-function",
+      "identity": "support-copilot",
+      "actions": ["Microsoft.Storage/storageAccounts/queueServices/queues/messages/add/action"],
+      "scope": "/subscriptions/sub-prod/resourceGroups/rg-support/providers/Microsoft.Storage/storageAccounts/stsupport/queueServices/default/queues/tickets",
+      "critical": true,
+      "plane": "data"
+    },
+    {
+      "consumer": "nightly-attachment-cleanup",
+      "identity": "arn:aws:iam::111122223333:role/invoice-agent",
+      "actions": ["s3:DeleteObject"],
+      "scope": "arn:aws:s3:::finance-invoices/inbound/*",
+      "critical": false
+    }
+  ]
+}

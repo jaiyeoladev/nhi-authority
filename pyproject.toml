@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nhi-authority"
+version = "0.1.0"
+description = "Compute the effective authority of non-human and AI agent identities in cloud environments, and plan safe revocation of the excess."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Kayode Jaiyeola" }]
+keywords = ["iam", "non-human-identity", "ai-agents", "least-privilege", "azure", "aws", "cloud-security"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  "License :: OSI Approved :: Apache Software License",
+  "Topic :: Security",
+  "Intended Audience :: System Administrators",
+]
+dependencies = []
+
+[project.optional-dependencies]
+azure = ["azure-identity>=1.15", "azure-mgmt-authorization>=4.0"]
+aws = ["boto3>=1.34"]
+dev = ["pytest>=8", "ruff>=0.5"]
+
+[project.scripts]
+nhi-authority = "nhi_authority.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "ISC"]
